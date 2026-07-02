@@ -3,7 +3,9 @@
 #include <Arduino.h>
 #include <Mesh.h>
 
-#if defined(ESP32)
+#if defined(NRF52_PLATFORM)
+  #include <InternalFileSystem.h>
+#elif defined(ESP32)
   #include <SPIFFS.h>
 #endif
 
@@ -16,10 +18,6 @@
 #include <helpers/AdvertDataHelpers.h>
 #include <helpers/TxtDataHelpers.h>
 #include <target.h>
-
-#ifdef DISPLAY_CLASS
-  #include <helpers/ui/SSD1306Display.h>
-#endif
 
 #ifndef FIRMWARE_BUILD_DATE
   #define FIRMWARE_BUILD_DATE  "1 Jul 2026"
@@ -85,6 +83,18 @@ class DroneScanner : public BaseChatMesh {
   void _sendScanReport();
 
 protected:
+  mesh::DispatcherAction onRecvPacket(mesh::Packet* pkt) override {
+    if (pkt->isRouteDirect() && pkt->getPayloadType() == PAYLOAD_TYPE_CONTROL
+        && pkt->payload_len > 0 && (pkt->payload[0] & 0x80) != 0
+        && pkt->getPathHashCount() == 0) {
+      onControlDataRecv(pkt);
+      return ACTION_RELEASE;
+    }
+    return mesh::Mesh::onRecvPacket(pkt);
+  }
+
+  void onControlDataRecv(mesh::Packet* packet) override;
+
   void onAdvertRecv(mesh::Packet* pkt, const mesh::Identity& id,
                     uint32_t timestamp,
                     const uint8_t* app_data, size_t app_data_len) override;
@@ -114,7 +124,6 @@ protected:
   void onContactResponse(const ContactInfo& contact,
                          const uint8_t* data, uint8_t len) override {}
 
-  // Required timeout calculators
   uint32_t calcFloodTimeoutMillisFor(uint32_t pkt_airtime_millis) const override {
     return pkt_airtime_millis * 3;
   }
@@ -122,30 +131,14 @@ protected:
     return pkt_airtime_millis * (path_len + 1) * 2;
   }
   void onSendTimeout() override {}
-  void onControlDataRecv(mesh::Packet* packet) override;
-  mesh::DispatcherAction onRecvPacket(mesh::Packet* pkt) override {
-    // Intercept control packets directly
-    if (pkt->isRouteDirect() && pkt->getPayloadType() == PAYLOAD_TYPE_CONTROL
-        && pkt->payload_len > 0 && (pkt->payload[0] & 0x80) != 0
-        && pkt->getPathHashCount() == 0) {
-      Serial.printf("  >>> CONTROL intercept payload0=%02X\n", pkt->payload[0]);
-      onControlDataRecv(pkt);
-      return ACTION_RELEASE;
-    }
-    return mesh::Mesh::onRecvPacket(pkt);
-  }
-  bool filterRecvFloodPacket(mesh::Packet* pkt) override {
-    Serial.printf("  PARSED: ptype=%d route=%d pathcount=%d payload[0]=%02X\n",
-      pkt->getPayloadType(), pkt->getRouteType(),
-      pkt->getPathHashCount(),
-      pkt->payload_len > 0 ? pkt->payload[0] : 0xFF);
-    return false;
-  }
+
   void logRxRaw(float snr, float rssi, const uint8_t raw[], int len) override {
     Serial.printf("  RAW rx: len=%d snr=%.1f rssi=%.0f bytes:", len, snr, rssi);
     for (int i = 0; i < min(len, 8); i++) Serial.printf("%02X ", raw[i]);
     Serial.println();
   }
+
+  bool filterRecvFloodPacket(mesh::Packet* pkt) override { return false; }
 
 public:
   DroneScanner(mesh::Radio& radio, mesh::RNG& rng,
@@ -155,5 +148,4 @@ public:
   void loop();
 
   NodePrefs* getNodePrefs() { return &_prefs; }
-  void updateDisplay(const char* line1, const char* line2 = nullptr, const char* line3 = nullptr);
 };

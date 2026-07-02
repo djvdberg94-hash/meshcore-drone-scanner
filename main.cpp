@@ -1,15 +1,23 @@
 #include <Arduino.h>
 #include <Mesh.h>
 #include "DroneScanner.h"
-#include <SPIFFS.h>
-#include <helpers/ArduinoSerialInterface.h>
 
+#if defined(NRF52_PLATFORM)
+  #include <InternalFileSystem.h>
+  #if defined(QSPIFLASH)
+    #include <CustomLFS_QSPIFlash.h>
+  #endif
+#elif defined(ESP32)
+  #include <SPIFFS.h>
+#endif
+
+#include <helpers/ArduinoSerialInterface.h>
 ArduinoSerialInterface serial_interface;
+
 StdRNG fast_rng;
 SimpleMeshTables tables;
 DroneScanner the_mesh(radio_driver, fast_rng, rtc_clock, tables);
 
-// Display state - updated by DroneScanner
 char disp_line1[22] = "DroneScanner";
 char disp_line2[22] = "Starting...";
 char disp_line3[22] = "";
@@ -36,19 +44,23 @@ void setup() {
 
   if (!radio_init()) {
     Serial.println("Radio init FAILED!");
-#ifdef DISPLAY_CLASS
-    display.startFrame();
-    display.setCursor(0, 0); display.print("Radio FAIL!");
-    display.endFrame();
-#endif
     while (1);
   }
 
   fast_rng.begin(radio_driver.getRngSeed());
+
+#if defined(NRF52_PLATFORM)
+  InternalFS.begin();
+  #if defined(QSPIFLASH)
+    QSPIFlash.begin();
+    the_mesh.begin(&QSPIFlash);
+  #else
+    the_mesh.begin(&InternalFS);
+  #endif
+#elif defined(ESP32)
   SPIFFS.begin(true);
   the_mesh.begin(&SPIFFS);
-
-  set_display("DroneScanner", "Ready for", "takeoff!");
+#endif
 
   board.onBootComplete();
 }
@@ -67,13 +79,10 @@ void loop() {
     char hb[2] = {spinner[tick++ % 4], 0};
 
     display.startFrame();
-    // Line 1: title + spinner
     char title[22];
     snprintf(title, sizeof(title), "Drone %s", hb);
     display.setCursor(0, 0); display.print(title);
-    // Line 2
     display.setCursor(0, 12); display.print(disp_line2);
-    // Line 3
     display.setCursor(0, 24); display.print(disp_line3);
     display.endFrame();
   }
