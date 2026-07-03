@@ -46,15 +46,7 @@ Edit DroneScanner.h to change:
 Configured for 869.618 MHz, BW 62.5, SF8, CR8 (South African MeshCore community settings).
 Adjust LORA_FREQ, LORA_BW, LORA_SF, LORA_CR in the platformio env for your region.
 
-## OLED Display (Heltec only)
-
-Boot:     DroneScanner / Starting...
-Ready:    DroneScanner / Ready for / takeoff!
-Scanning: Scanning! / Scan #1... / Listening...
-Live:     Scanning... / Nodes: 2 / RPT_E46D 14dB
-Done:     Scan done! / #1: 2 node(s) / RPT_E46D 14dB
-
 ## Author
 
-ZR6DJV - Queenswood, Pretoria, South Africa
+ZR6DJV - South Africa
 Amateur Radio Operator - MeshCore mesh at 869.618 MHz
